@@ -295,7 +295,7 @@ replicaset.apps/hello-kubernetes-6f8d7694bc   1         1         1       2m38s
 
 Clean: 
 
-delete LB via hcloud UI and -> 
+`terraform destroy` anf hcloud delete LB & Volume during cmd execution -> 
 
 $ terraform destroy:
 
