@@ -1,4 +1,4 @@
-# k3s-hcloud
+# k3s-hcloud (ubuntu)
 
 
 ### Kubernetes stack on Hetzner Cloud (k3s-based)
