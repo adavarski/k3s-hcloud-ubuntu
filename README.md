@@ -401,7 +401,15 @@ prometheus    prometheus-server-56dc7979b8-p7bhb                 2/2     Running
 
 ### Clean: 
 
-`terraform destroy` and hcloud delete LB & Volume > kubectl delete -f hello
+delete LB & Volume
+```
+$ kubectl delete -f ./manifests/hello-kubernetes-default.yaml 
+$ helm delete grafana -n grafana
+$ helm delete prometheus -n prometheus
+$ helm delete metrics-server
+```
+
+`terraform destroy` and hcloud delete LB & Volume >
 
 $ terraform destroy:
 
