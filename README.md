@@ -399,6 +399,76 @@ prometheus    prometheus-server-56dc7979b8-p7bhb                 2/2     Running
 <img src="pictures/grafana-cluster-monitoring.png" width="900">
 <img src="pictures/grafana-monitoring-pods.png" width="900">
 
+### Logs Aggregation (EFK: ElasticSearch + Kibana + FluentBit)
+
+```
+$ kubectl create ns logging
+$ helm repo add elastic https://helm.elastic.co
+$ helm install elasticsearch elastic/elasticsearch --namespace logging
+$ helm repo add fluent https://fluent.github.io/helm-charts
+$ helm install fluent-bit fluent/fluent-bit -n logging
+$ helm repo add bitnami https://charts.bitnami.com/bitnami
+$ helm install --namespace logging kibana bitnami/kibana --set elasticsearch.hosts[0]=elasticsearch-master,elasticsearch.port=9200
+Note: $ helm install kibana elastic/kibana --namespace logging (pending kibana pod)
+
+$ kubectl get all -n logging
+NAME                          READY   STATUS    RESTARTS   AGE
+pod/elasticsearch-master-0    1/1     Running   0          115s
+pod/elasticsearch-master-1    1/1     Running   0          115s
+pod/elasticsearch-master-2    0/1     Pending   0          115s
+pod/fluent-bit-cwcv6          1/1     Running   0          103s
+pod/fluent-bit-npdtc          1/1     Running   0          103s
+pod/kibana-7f6c498774-sx6w8   1/1     Running   0          87s
+
+NAME                                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)             AGE
+service/elasticsearch-master            ClusterIP   10.43.215.237   <none>        9200/TCP,9300/TCP   115s
+service/elasticsearch-master-headless   ClusterIP   None            <none>        9200/TCP,9300/TCP   115s
+service/fluent-bit                      ClusterIP   10.43.187.164   <none>        2020/TCP            104s
+service/kibana                          ClusterIP   10.43.65.155    <none>        5601/TCP            87s
+
+NAME                        DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+daemonset.apps/fluent-bit   2         2         2       2            2           <none>          104s
+
+NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/kibana   1/1     1            1           87s
+
+NAME                                DESIRED   CURRENT   READY   AGE
+replicaset.apps/kibana-7f6c498774   1         1         1       87s
+
+NAME                                    READY   AGE
+statefulset.apps/elasticsearch-master   2/3     115s
+
+$ helm list -n logging
+NAME         	NAMESPACE	REVISION	UPDATED                                	STATUS  	CHART               	APP VERSION
+elasticsearch	logging  	1       	2021-11-17 20:18:49.706907475 +0200 EET	deployed	elasticsearch-7.15.0	7.15.0     
+fluent-bit   	logging  	1       	2021-11-17 20:19:00.947000336 +0200 EET	deployed	fluent-bit-0.19.5   	1.8.9      
+kibana       	logging  	1       	2021-11-17 20:19:17.270463388 +0200 EET	deployed	kibana-9.1.2        	7.15.2     
+
+$ kubectl edit configmap fluent-bit -n logging fluent-bit 
+
+$ kubectl -n logging port-forward svc/elasticsearch-master 9200
+$ curl localhost:9200/_cat/indices
+green open .geoip_databases                uf5lUL-5QOS0WDQL0FNsOg 1 1   42   0  81.7mb  40.8mb
+green open .apm-custom-link                SpZ6zSPZTBmApfGelfrAXw 1 1    0   0    416b    208b
+green open .kibana-event-log-7.15.2-000001 6LNanHeFSWmZjh1e9OmX3A 1 1    4   0  36.3kb  18.1kb
+green open .apm-agent-configuration        uSs9XTfyR42i4pjrh7QBYw 1 1    0   0    416b    208b
+green open .async-search                   ge4J4blIR_2Y9T--7czh7g 1 1    0   0    462b    231b
+green open logstash-2021.11.17             haKkeW9fQ4i0eyucuQ9Ugg 1 1 7061   0   3.4mb   1.7mb
+green open .kibana_7.15.2_001              0F9-EtwyRze-fwON0V2A9Q 1 1   27   6  14.1mb     7mb
+green open .tasks                          GctXNRSMRpeRIXZRSskZxg 1 1    4   0  36.9kb  15.4kb
+green open .kibana_task_manager_7.15.2_001 W88sxuV0S5KxKUmLNaWeEg 1 1   15 279 533.6kb 278.8kb
+
+$ kubectl -n logging port-forward deployment/kibana 5601
+Forwarding from 127.0.0.1:5601 -> 5601
+Forwarding from [::1]:5601 -> 5601
+
+Browser: http://localhost:5601 --> Add your data --->  Elasticsearch logs ---> Discover ---> Create index pattern
+ ---> logstash-* ---> Discover
+```
+<img src="pictures/kibana-ui-logstach-indices.png" width="900">
+
+
+
 ### Clean: 
 
 delete LB (hello) & Volumes (hello/prometheus/grafana)
@@ -407,6 +477,9 @@ $ kubectl delete -f ./manifests/hello-kubernetes-default.yaml
 $ helm delete grafana -n grafana
 $ helm delete prometheus -n prometheus
 $ helm delete metrics-server
+$ helm delete elasticsearch -n logging
+$ helm delete fluent-bit -n logging
+$ helm delete kibana -n logging
 ```
 
 `terraform destroy` and hcloud delete LB & Volume >
