@@ -293,7 +293,113 @@ replicaset.apps/hello-kubernetes-6f8d7694bc   1         1         1       2m38s
 <img src="pictures/k3s-hcloud-hello-load_balancer.png" width="900">
 <img src="pictures/k3s-hcloud-hello.png" width="900">
 
-Clean: 
+
+### Moniroring (via Prometheus & Grafana)
+
+```
+# Deploy the Metrics Server with the following command (needed by Prometheus&Grafana---> https://github.com/kubernetes-sigs/metrics-server/tree/master/charts/metrics-server):
+
+Note: kubelet serving certificates are self-signed. This can be an issue for metrics-server. See here for some workarounds.
+
+$ helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+$ helm upgrade --set 'args={--kubelet-insecure-tls}' --install metrics-server metrics-server/metrics-server
+
+$ kubectl get po --all-namespaces|grep metrics
+default       metrics-server-cb4bc5544-b52fg                     1/1     Running   0          87s
+
+# Add prometheus Helm repo
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+# Add grafana Helm repo
+helm repo add grafana https://grafana.github.io/helm-charts
+
+# Deploy Prometheus
+kubectl create namespace prometheus
+helm install prometheus prometheus-community/prometheus \
+--namespace prometheus \
+--set alertmanager.persistentVolume.storageClass="hcloud-volumes" \
+--set server.persistentVolume.storageClass="hcloud-volumes"
+
+$ kubectl port-forward -n prometheus deploy/prometheus-server 8080:9090
+
+Check prom metrics (pods):
+sum(rate(container_cpu_usage_seconds_total{container_name!="POD",
+namespace!=""}[5m])) by (namespace)
+sum(kube_pod_container_resource_requests_cpu_cores) by (namespace)
+sum(kube_pod_container_resource_limits_cpu_cores) by (namespace)
+
+# Deploy Grafana
+
+cat << EoF > ./grafana.yaml
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      url: http://prometheus-server.prometheus.svc.cluster.local
+      access: proxy
+      isDefault: true
+EoF
+
+$ kubectl create namespace grafana
+$ helm install grafana grafana/grafana \
+--namespace grafana \
+--set persistence.storageClassName="hcloud-volumes" \
+--set persistence.enabled=true \
+--set adminPassword='Kr0k0dil' \
+--values ./grafana.yaml \
+--set service.type=ClusterIP
+
+$ export POD_NAME=$(kubectl get pods --namespace grafana -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=grafana" -o jsonpath="{.items[0].metadata.name}")
+$ kubectl --namespace grafana port-forward $POD_NAME 3000
+Forwarding from 127.0.0.1:3000 -> 3000
+Forwarding from [::1]:3000 -> 3000
+
+Browser: http://localhost:3000/login (admin:Kr0k0dil)
+
+Add Grafana Dashboards:
+https://grafana.com/grafana/dashboards/3119 Downloads: 28838
+https://grafana.com/grafana/dashboards/6417 Downloads: 195449
+
+# Check
+$ kubectl get pvc --all-namespaces
+NAMESPACE    NAME                      STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS     AGE
+grafana      grafana                   Bound    pvc-5190f560-48b2-43dc-ba17-262a7fbba1e3   10Gi       RWO            hcloud-volumes   33s
+prometheus   prometheus-alertmanager   Bound    pvc-47815025-5d71-4ddc-b3ba-ec17d856e5cf   10Gi       RWO            hcloud-volumes   50s
+prometheus   prometheus-server         Bound    pvc-90ec211a-6259-48e2-b1ee-e875d172ed43   10Gi       RWO            hcloud-volumes   50s
+
+$ helm list --all-namespaces
+NAME          	NAMESPACE 	REVISION	UPDATED                                	STATUS  	CHART               	APP VERSION
+grafana       	grafana   	1       	2021-11-17 15:56:01.321797788 +0200 EET	deployed	grafana-6.17.6      	8.2.3      
+metrics-server	default   	1       	2021-11-17 15:53:42.921514757 +0200 EET	deployed	metrics-server-3.6.0	0.5.1      
+prometheus    	prometheus	1       	2021-11-17 15:55:44.086824173 +0200 EET	deployed	prometheus-14.11.1  	2.26.0 
+
+$ kubectl get po --all-namespaces
+NAMESPACE     NAME                                               READY   STATUS    RESTARTS   AGE
+default       metrics-server-cb4bc5544-b52fg                     1/1     Running   0          5m32s
+grafana       grafana-8457677d77-sdxtv                           1/1     Running   0          3m13s
+kube-system   coredns-7448499f4d-vslmz                           1/1     Running   0          92m
+kube-system   hcloud-cloud-controller-manager-74b74b9b46-k6rjv   1/1     Running   0          92m
+kube-system   hcloud-csi-controller-0                            5/5     Running   0          92m
+kube-system   hcloud-csi-node-8g9js                              3/3     Running   0          91m
+kube-system   hcloud-csi-node-bh4mm                              3/3     Running   0          91m
+kube-system   hcloud-csi-node-gm84z                              3/3     Running   0          91m
+kube-system   hcloud-csi-node-n2n25                              3/3     Running   0          92m
+kube-system   hcloud-csi-node-x6nz7                              3/3     Running   0          91m
+prometheus    prometheus-alertmanager-688fdfff59-lvhvb           2/2     Running   0          3m30s
+prometheus    prometheus-kube-state-metrics-58c5cd6ddb-jjsdp     1/1     Running   0          3m30s
+prometheus    prometheus-node-exporter-bl7mp                     1/1     Running   0          3m30s
+prometheus    prometheus-node-exporter-srcxm                     1/1     Running   0          3m30s
+prometheus    prometheus-pushgateway-7c8564df88-spkrm            1/1     Running   0          3m30s
+prometheus    prometheus-server-56dc7979b8-p7bhb                 2/2     Running   0          3m30s
+
+```
+
+<img src="pictures/prometheus-ui.png" width="900">
+<img src="pictures/grafana-cluster-monitoring.png" width="900">
+<img src="pictures/grafana-monitoring-pods.png" width="900">
+
+### Clean: 
 
 `terraform destroy` and hcloud delete LB & Volume > kubectl delete -f hello
 
