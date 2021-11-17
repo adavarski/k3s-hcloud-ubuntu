@@ -401,7 +401,7 @@ prometheus    prometheus-server-56dc7979b8-p7bhb                 2/2     Running
 
 ### Clean: 
 
-delete LB & Volume
+delete LB (hello) & Volumes (hello/prometheus/grafana)
 ```
 $ kubectl delete -f ./manifests/hello-kubernetes-default.yaml 
 $ helm delete grafana -n grafana
